@@ -21,6 +21,7 @@ cudnn.keep32bitParam = true
 local M = {}
 
 function M.setup(opt, checkpoint)
+   print(checkpoint)
    local model
    if checkpoint then
       assert(paths.filep(checkpoint), 'Saved model not found: ' .. checkpoint)
@@ -29,11 +30,12 @@ function M.setup(opt, checkpoint)
       if(opt.tensorType == 'torch.CudaTensor' or opt.tensorType == 'torch.CudaDoubleTensor') then
 	 model:type(opt.tensorType)
       else
+	 print("Loading into "..opt.tensorType)
 	 model.modules[1]:type(opt.tensorType)
 	 model.modules[2]:type(opt.tensorType)
 	 model.modules[3]:type('torch.CudaTensor')
 	 model.modules[4]:type('torch.CudaTensor')
-      end	 
+      end
    elseif opt.retrain ~= 'none' then
       assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
       print('Loading model from file: ' .. opt.retrain)
@@ -41,6 +43,7 @@ function M.setup(opt, checkpoint)
       if(opt.tensorType == 'torch.CudaTensor' or opt.tensorType == 'torch.CudaDoubleTensor') then
 	 model:type(opt.tensorType)
       else
+	 print("Loading into "..opt.tensorType)
 	 model.modules[1]:type(opt.tensorType)
 	 model.modules[2]:type(opt.tensorType)
 	 model.modules[3]:type('torch.CudaTensor')
@@ -59,6 +62,7 @@ function M.setup(opt, checkpoint)
 
    -- optnet is an general library for reducing memory usage in neural networks
    if opt.optnet then
+      
       local optnet = require 'optnet'
       local imsize = opt.dataset == 'imagenet' and 224 or 32
       local sampleInput = torch.zeros(4,3,imsize,imsize):type(opt.tensorType)

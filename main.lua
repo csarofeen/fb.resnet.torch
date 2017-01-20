@@ -27,10 +27,10 @@ torch.manualSeed(opt.manualSeed)
 cutorch.manualSeedAll(opt.manualSeed)
 
 -- Load previous checkpoint, if it exists
-local checkpoint, optimState, checkpoint_epoch = checkpoints.latest(opt)
+local modelPath, optimState, checkpoint_epoch = checkpoints.latest(opt)
 
 -- Create model
-local model, criterion  = models.setup(opt, checkpoint.modelPath)
+local model, criterion  = models.setup(opt, modelPath)
 
 -- Data loading
 local trainLoader, valLoader = DataLoader.create(opt)
@@ -44,7 +44,7 @@ if opt.testOnly then
    return
 end
 
-local startEpoch = checkpoint and checkpoint_epoch + 1 or opt.epochNumber
+local startEpoch = checkpoint_epoch and checkpoint_epoch + 1 or opt.epochNumber
 local bestTop1 = math.huge
 local bestTop5 = math.huge
 for epoch = startEpoch, opt.nEpochs do
