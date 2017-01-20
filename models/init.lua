@@ -13,20 +13,39 @@
 require 'nn'
 require 'cunn'
 require 'cudnn'
+local checkpoints = require 'checkpoints'
+
+cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'})
+cudnn.keep32bitParam = true
 
 local M = {}
 
 function M.setup(opt, checkpoint)
    local model
    if checkpoint then
-      local modelPath = paths.concat(opt.resume, checkpoint.modelFile)
-      assert(paths.filep(modelPath), 'Saved model not found: ' .. modelPath)
-      print('=> Resuming model from ' .. modelPath)
-      model = torch.load(modelPath):type(opt.tensorType)
+      assert(paths.filep(checkpoint), 'Saved model not found: ' .. checkpoint)
+      print('=> Resuming model from ' .. checkpoint)
+      model = torch.load(checkpoint)
+      if(opt.tensorType == 'torch.CudaTensor' or opt.tensorType == 'torch.CudaDoubleTensor') then
+	 model:type(opt.tensorType)
+      else
+	 model.modules[1]:type(opt.tensorType)
+	 model.modules[2]:type(opt.tensorType)
+	 model.modules[3]:type('torch.CudaTensor')
+	 model.modules[4]:type('torch.CudaTensor')
+      end	 
    elseif opt.retrain ~= 'none' then
       assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
       print('Loading model from file: ' .. opt.retrain)
-      model = torch.load(opt.retrain):type(opt.tensorType)
+      model = torch.load(opt.retrain)
+      if(opt.tensorType == 'torch.CudaTensor' or opt.tensorType == 'torch.CudaDoubleTensor') then
+	 model:type(opt.tensorType)
+      else
+	 model.modules[1]:type(opt.tensorType)
+	 model.modules[2]:type(opt.tensorType)
+	 model.modules[3]:type('torch.CudaTensor')
+	 model.modules[4]:type('torch.CudaTensor')
+      end	 
       model.__memoryOptimized = nil
    else
       print('=> Creating model from file: models/' .. opt.netType .. '.lua')
@@ -84,17 +103,29 @@ function M.setup(opt, checkpoint)
       local fastest, benchmark = cudnn.fastest, cudnn.benchmark
 
       local dpt = nn.DataParallelTable(1, true, true)
-         :add(model, gpus)
-         :threads(function()
-            local cudnn = require 'cudnn'
-            cudnn.fastest, cudnn.benchmark = fastest, benchmark
-         end)
-      dpt.gradInput = nil
+      if opt.tensorType == 'torch.CudaDoubleTensor' then
+	 dpt = dpt:type(opt.tensorType)
+      else
+	 dpt = dpt:type('torch.CudaTensor')
+      end
 
-      model = dpt:type(opt.tensorType)
+      dpt:add(model, gpus):threads
+      (
+	 function()
+	    local cudnn = require 'cudnn'
+	    cudnn.fastest, cudnn.benchmark = fastest, benchmark
+	 end
+      )
+      dpt.gradInput = nil
+      model = dpt
    end
 
-   local criterion = nn.CrossEntropyCriterion():type(opt.tensorType)
+   local criterion = nn.CrossEntropyCriterion()
+   if opt.tensorType == 'torch.CudaDoubleTensor' then
+      criterion:type(opt.tensorType)
+   else
+      criterion:type('torch.CudaTensor')
+   end
    return model, criterion
 end
 

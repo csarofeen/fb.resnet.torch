@@ -151,9 +151,7 @@ function Trainer:computeScore(output, target, nCrops)
 end
 
 local function getCudaTensorType(tensorType)
-  if tensorType == 'torch.CudaHalfTensor' then
-     return cutorch.createCudaHostHalfTensor()
-  elseif tensorType == 'torch.CudaDoubleTensor' then
+  if tensorType == 'torch.CudaDoubleTensor' then
     return cutorch.createCudaHostDoubleTensor()
   else
      return cutorch.createCudaHostTensor()

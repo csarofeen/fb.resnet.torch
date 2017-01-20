@@ -49,9 +49,7 @@ function DataLoader:__init(dataset, opt, split)
    self.__size = sizes[1][1]
    self.batchSize = math.floor(opt.batchSize / self.nCrops)
    local function getCPUType(tensorType)
-      if tensorType == 'torch.CudaHalfTensor' then
-         return 'HalfTensor'
-      elseif tensorType == 'torch.CudaDoubleTensor' then
+      if tensorType == 'torch.CudaDoubleTensor' then
          return 'DoubleTensor'
       else
          return 'FloatTensor'

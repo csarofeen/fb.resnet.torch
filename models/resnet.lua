@@ -12,9 +12,9 @@
 local nn = require 'nn'
 require 'cunn'
 
-local Convolution = cudnn.SpatialConvolution
-local Avg = cudnn.SpatialAveragePooling
-local ReLU = cudnn.ReLU
+local Convolution = nn.SpatialConvolution
+local Avg = nn.SpatialAveragePooling
+local ReLU = nn.ReLU
 local Max = nn.SpatialMaxPooling
 local SBatchNorm = nn.SpatialBatchNormalization
 
@@ -98,6 +98,7 @@ local function createModel(opt)
    end
 
    local model = nn.Sequential()
+   local linear = nn.Sequential()
    if opt.dataset == 'imagenet' then
       -- Configurations for ResNet:
       --  num. residual blocks, num features, residual block function
@@ -124,8 +125,8 @@ local function createModel(opt)
       model:add(layer(block, 256, def[3], 2))
       model:add(layer(block, 512, def[4], 2))
       model:add(Avg(7, 7, 1, 1))
-      model:add(nn.View(nFeatures):setNumInputDims(3))
-      model:add(nn.Linear(nFeatures, 1000))
+      linear:add(nn.View(nFeatures):setNumInputDims(3))
+      linear:add(nn.Linear(nFeatures, 1000))
    elseif opt.dataset == 'cifar10' then
       -- Model type specifies number of layers for CIFAR-10 model
       assert((depth - 2) % 6 == 0, 'depth should be one of 20, 32, 44, 56, 110, 1202')
@@ -141,8 +142,8 @@ local function createModel(opt)
       model:add(layer(basicblock, 32, n, 2))
       model:add(layer(basicblock, 64, n, 2))
       model:add(Avg(8, 8, 1, 1))
-      model:add(nn.View(64):setNumInputDims(3))
-      model:add(nn.Linear(64, 10))
+      linear:add(nn.View(64):setNumInputDims(3))
+      linear:add(nn.Linear(64, 10))
    elseif opt.dataset == 'cifar100' then
       -- Model type specifies number of layers for CIFAR-100 model
       assert((depth - 2) % 6 == 0, 'depth should be one of 20, 32, 44, 56, 110, 1202')
@@ -158,8 +159,8 @@ local function createModel(opt)
       model:add(layer(basicblock, 32, n, 2))
       model:add(layer(basicblock, 64, n, 2))
       model:add(Avg(8, 8, 1, 1))
-      model:add(nn.View(64):setNumInputDims(3))
-      model:add(nn.Linear(64, 100))
+      linear:add(nn.View(64):setNumInputDims(3))
+      linear:add(nn.Linear(64, 100))
    else
       error('invalid dataset: ' .. opt.dataset)
    end
@@ -188,20 +189,33 @@ local function createModel(opt)
    BNInit('fbnn.SpatialBatchNormalization')
    BNInit('cudnn.SpatialBatchNormalization')
    BNInit('nn.SpatialBatchNormalization')
-   for k,v in pairs(model:findModules('nn.Linear')) do
+   for k,v in pairs(linear:findModules('nn.Linear')) do
       v.bias:zero()
    end
-   model:type(opt.tensorType)
 
+   network = nn.Sequential()
+   if opt.tensorType == 'torch.CudaHalfTensor' then
+      network:add(nn.Copy('torch.CudaTensor', opt.tensorType))
+      network:add(model)
+      cudnn.convert(network, cudnn):cuda():type(opt.tensorType)
+      network:add(nn.Copy(opt.tensorType, 'torch.CudaTensor', nil, true):type('torch.CudaTensor'))
+      network:add(linear:type('torch.CudaTensor'))
+
+   else
+      network:add(cudnn.convert(model, cudnn))
+      network:add(linear)
+      network:type(opt.tensorType)
+   end
+   
    if opt.cudnn == 'deterministic' then
-      model:apply(function(m)
+      network:apply(function(m)
          if m.setMode then m:setMode(1,1,1) end
       end)
    end
 
-   model:get(1).gradInput = nil
+--   network:get(1).gradInput = nil
 
-   return model
+   return network
 end
 
 return createModel
